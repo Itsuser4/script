@@ -110,7 +110,6 @@ local SmoothnessSlider = MainTab:CreateSlider({
         Rayfield:Notify({
             Title = "Aimbot Smoothness",
             Content = "Smoothness set to " .. tostring(value),
- Stuart
             Duration = 3
         })
     end
