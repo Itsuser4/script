@@ -41,8 +41,8 @@ local aimbotSmoothness = 0.5
 
 -- Function to find the closest living player
 local function getClosestPlayer()
-    if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return nil -- Prevent nil reference if character isn't loaded
+    if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") or not workspace.CurrentCamera then
+        return nil -- Prevent nil reference if character or camera isn't loaded
     end
     local closestPlayer = nil
     local closestDistance = math.huge
@@ -64,13 +64,14 @@ end
 
 -- Aimbot update function
 local function aimbotUpdate()
-    if not aimbotEnabled then return end
+    if not aimbotEnabled or not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") or not workspace.CurrentCamera then
+        return
+    end
     local camera = workspace.CurrentCamera
     local target = getClosestPlayer()
     if target and target.Character and target.Character:FindFirstChild("Head") then
         local headPos = target.Character.Head.Position
         local targetCFrame = CFrame.new(camera.CFrame.Position, headPos)
-        -- Ensure smoothness is never exactly 0 to avoid snapping
         camera.CFrame = camera.CFrame:Lerp(targetCFrame, math.clamp(1 - aimbotSmoothness, 0.01, 1))
     end
 end
@@ -101,7 +102,7 @@ local AimbotToggle = MainTab:CreateButton({
 
 local SmoothnessSlider = MainTab:CreateSlider({
     Name = "Aimbot Smoothness",
-    Range = {0.1, 1}, -- Adjusted range to prevent snapping
+    Range = {0.1, 1},
     Increment = 0.1,
     Suffix = "",
     CurrentValue = 0.5,
@@ -123,7 +124,9 @@ local espEnabled = false
 local highlights = {}
 
 local function applyESP(player)
-    if player == localPlayer or not player.Character or not espEnabled then return end
+    if player == localPlayer or not espEnabled or not player.Character or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+        return
+    end
     local highlight = player.Character:FindFirstChild("Highlight")
     if not highlight then
         highlight = Instance.new("Highlight")
@@ -178,7 +181,9 @@ local function createBoxDrawing()
 end
 
 local function applyBoxESP(player)
-    if player == localPlayer or not player.Character or not boxESPEnabled then return end
+    if player == localPlayer or not boxESPEnabled or not player.Character or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+        return
+    end
     if not boxDrawings[player] then
         boxDrawings[player] = createBoxDrawing()
     end
@@ -192,7 +197,9 @@ local function removeBoxESP(player)
 end
 
 local function updateBoxESP()
-    if not boxESPEnabled then return end
+    if not boxESPEnabled or not workspace.CurrentCamera then
+        return
+    end
     local camera = workspace.CurrentCamera
     for player, quad in pairs(boxDrawings) do
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
@@ -259,7 +266,9 @@ local function createTracerDrawing()
 end
 
 local function applyTracer(player)
-    if player == localPlayer or not player.Character or not tracersEnabled then return end
+    if player == localPlayer or not tracersEnabled or not player.Character or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+        return
+    end
     if not tracerDrawings[player] then
         tracerDrawings[player] = createTracerDrawing()
     end
@@ -273,7 +282,9 @@ local function removeTracer(player)
 end
 
 local function updateTracers()
-    if not tracersEnabled then return end
+    if not tracersEnabled or not workspace.CurrentCamera then
+        return
+    end
     local camera = workspace.CurrentCamera
     local screenSize = camera.ViewportSize
     local bottomCenter = Vector2.new(screenSize.X / 2, screenSize.Y)
@@ -339,7 +350,9 @@ local function createSkeletonDrawing()
 end
 
 local function applySkeletonESP(player)
-    if player == localPlayer or not player.Character or not skeletonESPEnabled then return end
+    if player == localPlayer or not skeletonESPEnabled or not player.Character or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+        return
+    end
     if not skeletonDrawings[player] then
         skeletonDrawings[player] = createSkeletonDrawing()
     end
@@ -355,7 +368,9 @@ local function removeSkeletonESP(player)
 end
 
 local function updateSkeletonESP()
-    if not skeletonESPEnabled then return end
+    if not skeletonESPEnabled or not workspace.CurrentCamera then
+        return
+    end
     local camera = workspace.CurrentCamera
     for player, lines in pairs(skeletonDrawings) do
         if player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
@@ -477,8 +492,10 @@ local function createHealthBar(player)
 end
 
 local function applyHealthBar(player)
-    if player == localPlayer or not player.Character or not healthBarEnabled then return end
-    if not healthBars[player] and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") then
+    if player == localPlayer or not healthBarEnabled or not player.Character or not player.Character:FindFirstChild("Head") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+        return
+    end
+    if not healthBars[player] then
         local billboardGui = createHealthBar(player)
         billboardGui.Parent = player.Character.Head
         healthBars[player] = billboardGui
@@ -486,10 +503,10 @@ local function applyHealthBar(player)
         local humanoid = player.Character.Humanoid
         humanoid:GetPropertyChangedSignal("Health"):Connect(function()
             if healthBars[player] and humanoid.Health > 0 then
-                local healthPercent = humanoid.Health / humanoid.MaxHealth
                 local healthFill = healthBars[player]:FindFirstChild("HealthFill", true)
                 local textLabel = healthBars[player]:FindFirstChildOfClass("TextLabel")
                 if healthFill and textLabel then
+                    local healthPercent = humanoid.Health / humanoid.MaxHealth
                     healthFill.Size = UDim2.new(healthPercent, 0, 1, 0)
                     healthFill.BackgroundColor3 = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
                     textLabel.Text = string.format("%d/%d", math.floor(humanoid.Health), humanoid.MaxHealth)
@@ -583,6 +600,10 @@ local ResetSpeedButton = MiscTab:CreateButton({
 })
 
 local function onCharacterAdded(character)
+    if not character then return end
+    -- Wait for character to fully load
+    character:WaitForChild("Humanoid", 5)
+    character:WaitForChild("HumanoidRootPart", 5)
     if speedEnabled then
         updateSpeed()
     end
@@ -593,7 +614,9 @@ localPlayer.CharacterAdded:Connect(onCharacterAdded)
 local removeHairEnabled = false
 
 local function removePlayerHair(player)
-    if player == localPlayer or not player.Character or not removeHairEnabled then return end
+    if player == localPlayer or not removeHairEnabled or not player.Character then
+        return
+    end
     for _, accessory in ipairs(player.Character:GetChildren()) do
         if accessory:IsA("Accessory") and accessory.AccessoryType == Enum.AccessoryType.Hair then
             accessory:Destroy()
@@ -621,8 +644,11 @@ local RemoveHairButton = MiscTab:CreateButton({
             applyRemoveHair()
             for _, player in ipairs(Players:GetPlayers()) do
                 if player ~= localPlayer then
-                    player.CharacterAdded:Connect(function()
-                        removePlayerHair(player)
+                    player.CharacterAdded:Connect(function(character)
+                        if character then
+                            character:WaitForChild("Humanoid", 5)
+                            removePlayerHair(player)
+                        end
                     end)
                 end
             end
@@ -647,7 +673,9 @@ local function togglePhase()
     
     if phaseEnabled then
         phaseConnection = RunService.Heartbeat:Connect(function(deltaTime)
-            if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") or not localPlayer.Character:FindFirstChild("Humanoid") then return end
+            if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") or not localPlayer.Character:FindFirstChild("Humanoid") then
+                return
+            end
             local rootPart = localPlayer.Character.HumanoidRootPart
             local isPressingE = UserInputService:IsKeyDown(Enum.KeyCode.E)
             phaseCooldown = math.max(0, phaseCooldown - deltaTime)
@@ -783,11 +811,16 @@ SkeletonESPToggle.Callback = function()
     toggleVisualsConnection()
 end
 
--- Player event handling
+-- Player event handling with delayed application
 local playerConnections = {}
 Players.PlayerAdded:Connect(function(player)
     local characterConnection
-    characterConnection = player.CharacterAdded:Connect(function()
+    characterConnection = player.CharacterAdded:Connect(function(character)
+        if not character then return end
+        -- Wait for character to fully load
+        character:WaitForChild("Humanoid", 5)
+        character:WaitForChild("HumanoidRootPart", 5)
+        character:WaitForChild("Head", 5)
         applyESP(player)
         applyBoxESP(player)
         applyTracer(player)
