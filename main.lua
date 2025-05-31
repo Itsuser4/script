@@ -15,12 +15,8 @@ end
 -- Create the main window
 local Window = Rayfield:CreateWindow({
     Name = "Neptune Rivals",
-    Icon = 0,
     LoadingTitle = "Neptune Rivals",
     LoadingSubtitle = "by Asegarg",
-    Theme = "Dark",
-    DisableRayfieldPrompts = false,
-    DisableBuildWarnings = false,
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "NeptuneRivalsConfig",
@@ -45,10 +41,13 @@ local aimbotSmoothness = 0.5
 
 -- Function to find the closest living player
 local function getClosestPlayer()
+    if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return nil -- Prevent nil reference if character isn't loaded
+    end
     local closestPlayer = nil
     local closestDistance = math.huge
     local camera = workspace.CurrentCamera
-    local localPos = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") and localPlayer.Character.HumanoidRootPart.Position or camera.CFrame.Position
+    local localPos = localPlayer.Character.HumanoidRootPart.Position
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= localPlayer and player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
@@ -71,7 +70,8 @@ local function aimbotUpdate()
     if target and target.Character and target.Character:FindFirstChild("Head") then
         local headPos = target.Character.Head.Position
         local targetCFrame = CFrame.new(camera.CFrame.Position, headPos)
-        camera.CFrame = camera.CFrame:Lerp(targetCFrame, 1 - aimbotSmoothness)
+        -- Ensure smoothness is never exactly 0 to avoid snapping
+        camera.CFrame = camera.CFrame:Lerp(targetCFrame, math.clamp(1 - aimbotSmoothness, 0.01, 1))
     end
 end
 
@@ -101,7 +101,7 @@ local AimbotToggle = MainTab:CreateButton({
 
 local SmoothnessSlider = MainTab:CreateSlider({
     Name = "Aimbot Smoothness",
-    Range = {0, 1},
+    Range = {0.1, 1}, -- Adjusted range to prevent snapping
     Increment = 0.1,
     Suffix = "",
     CurrentValue = 0.5,
@@ -199,11 +199,10 @@ local function updateBoxESP()
             local rootPart = player.Character.HumanoidRootPart
             local head = player.Character:FindFirstChild("Head")
             if head then
-                local headPos = camera:WorldToViewportPoint(head.Position)
+                local headPos, onScreen = camera:WorldToViewportPoint(head.Position)
                 local rootPos = camera:WorldToViewportPoint(rootPart.Position)
-                local onScreen = headPos.Z > 0
-                quad.Visible = onScreen
-                if onScreen then
+                quad.Visible = onScreen and headPos.Z > 0
+                if quad.Visible then
                     local distanceY = math.clamp((Vector2.new(headPos.X, headPos.Y) - Vector2.new(rootPos.X, rootPos.Y)).Magnitude, 2, math.huge)
                     quad.PointA = Vector2.new(rootPos.X + distanceY, rootPos.Y - distanceY * 2)
                     quad.PointB = Vector2.new(rootPos.X - distanceY, rootPos.Y - distanceY * 2)
@@ -283,8 +282,8 @@ local function updateTracers()
         if player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
             local head = player.Character.Head
             local headPos, onScreen = camera:WorldToViewportPoint(head.Position)
-            line.Visible = onScreen
-            if onScreen then
+            line.Visible = onScreen and headPos.Z > 0
+            if line.Visible then
                 line.From = bottomCenter
                 line.To = Vector2.new(headPos.X, headPos.Y)
             end
@@ -479,28 +478,26 @@ end
 
 local function applyHealthBar(player)
     if player == localPlayer or not player.Character or not healthBarEnabled then return end
-    if not healthBars[player] and player.Character:FindFirstChild("Head") then
+    if not healthBars[player] and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") then
         local billboardGui = createHealthBar(player)
         billboardGui.Parent = player.Character.Head
         healthBars[player] = billboardGui
 
-        local humanoid = player.Character:FindFirstChild("Humanoid")
-        if humanoid then
-            humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-                if healthBars[player] and humanoid.Health > 0 then
-                    local healthPercent = humanoid.Health / humanoid.MaxHealth
-                    local healthFill = healthBars[player]:FindFirstChild("HealthFill", true)
-                    local textLabel = healthBars[player]:FindFirstChildOfClass("TextLabel")
-                    if healthFill and textLabel then
-                        healthFill.Size = UDim2.new(healthPercent, 0, 1, 0)
-                        healthFill.BackgroundColor3 = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
-                        textLabel.Text = string.format("%d/%d", math.floor(humanoid.Health), humanoid.MaxHealth)
-                    end
-                else
-                    removeHealthBar(player)
+        local humanoid = player.Character.Humanoid
+        humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+            if healthBars[player] and humanoid.Health > 0 then
+                local healthPercent = humanoid.Health / humanoid.MaxHealth
+                local healthFill = healthBars[player]:FindFirstChild("HealthFill", true)
+                local textLabel = healthBars[player]:FindFirstChildOfClass("TextLabel")
+                if healthFill and textLabel then
+                    healthFill.Size = UDim2.new(healthPercent, 0, 1, 0)
+                    healthFill.BackgroundColor3 = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
+                    textLabel.Text = string.format("%d/%d", math.floor(humanoid.Health), humanoid.MaxHealth)
                 end
-            end)
-        end
+            else
+                removeHealthBar(player)
+            end
+        end)
     end
 end
 
@@ -746,8 +743,51 @@ local function cleanupPlayer(player)
     removeHealthBar(player)
 end
 
+-- Consolidated RenderStepped for performance
+local function updateVisuals()
+    updateBoxESP()
+    updateTracers()
+    updateSkeletonESP()
+end
+
+local visualsConnection
+local function toggleVisualsConnection()
+    if boxESPEnabled or tracersEnabled or skeletonESPEnabled then
+        if not visualsConnection then
+            visualsConnection = RunService.RenderStepped:Connect(updateVisuals)
+        end
+    else
+        if visualsConnection then
+            visualsConnection:Disconnect()
+            visualsConnection = nil
+        end
+    end
+end
+
+-- Override toggles to manage consolidated RenderStepped
+local originalBoxESPToggle = BoxESPToggle.Callback
+BoxESPToggle.Callback = function()
+    originalBoxESPToggle()
+    toggleVisualsConnection()
+end
+
+local originalTracersToggle = TracersToggle.Callback
+TracersToggle.Callback = function()
+    originalTracersToggle()
+    toggleVisualsConnection()
+end
+
+local originalSkeletonESPToggle = SkeletonESPToggle.Callback
+SkeletonESPToggle.Callback = function()
+    originalSkeletonESPToggle()
+    toggleVisualsConnection()
+end
+
+-- Player event handling
+local playerConnections = {}
 Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(function()
+    local characterConnection
+    characterConnection = player.CharacterAdded:Connect(function()
         applyESP(player)
         applyBoxESP(player)
         applyTracer(player)
@@ -755,17 +795,22 @@ Players.PlayerAdded:Connect(function(player)
         removePlayerHair(player)
         applyHealthBar(player)
     end)
+    playerConnections[player] = characterConnection
 end)
 
-Players.PlayerRemoving:Connect(cleanupPlayer)
+Players.PlayerRemoving:Connect(function(player)
+    cleanupPlayer(player)
+    if playerConnections[player] then
+        playerConnections[player]:Disconnect()
+        playerConnections[player] = nil
+    end
+end)
 
 -- Script cleanup
 game:BindToClose(function()
     -- Clean up all connections
     if aimbotConnection then RunService:UnbindFromRenderStep("Aimbot") end
-    if boxESPConnection then boxESPConnection:Disconnect() end
-    if tracersConnection then tracersConnection:Disconnect() end
-    if skeletonESPConnection then skeletonESPConnection:Disconnect() end
+    if visualsConnection then visualsConnection:Disconnect() end
     if speedConnection then speedConnection:Disconnect() end
     if phaseConnection then phaseConnection:Disconnect() end
     if jumpConnection then jumpConnection:Disconnect() end
@@ -780,6 +825,11 @@ game:BindToClose(function()
     -- Clean up highlights and health bars
     for player, _ in pairs(highlights) do removeESP(player) end
     for player, _ in pairs(healthBars) do removeHealthBar(player) end
+    
+    -- Clean up player connections
+    for player, connection in pairs(playerConnections) do
+        connection:Disconnect()
+    end
 end)
 
 Rayfield:LoadConfiguration()
