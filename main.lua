@@ -3,45 +3,26 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
--- Load Rayfield with error handling
-local success, Rayfield = pcall(function()
-    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-end)
-if not success then
-    warn("Failed to load Rayfield: " .. tostring(Rayfield))
-    return
-end
+-- Configuration variables (edit these to change settings)
+local aimbotEnabled = true
+local aimbotSmoothness = 0.1
+local espEnabled = false
+local boxESPEnabled = true
+local tracersEnabled = true
+local skeletonESPEnabled = true
+local healthBarEnabled = false
 
--- Create the main window
-local Window = Rayfield:CreateWindow({
-    Name = "Neptune Rivals",
-    Icon = 0,
-    LoadingTitle = "Neptune Rivals",
-    LoadingSubtitle = "by Asegarg",
-    Theme = "Dark",
-    DisableRayfieldPrompts = false,
-    DisableBuildWarnings = false,
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "NeptuneRivalsConfig",
-        FileName = "NeptuneRivals"
-    },
-    Discord = {
-        Enabled = false,
-        Invite = "",
-        RememberJoins = true
-    },
-    KeySystem = false
-})
-
--- Main Tab
-local MainTab = Window:CreateTab("Main", 4483362458)
-local MainSection = MainTab:CreateSection("Main")
-
--- Aimbot variables
-local aimbotEnabled = false
+-- Internal variables
 local localPlayer = Players.LocalPlayer
-local aimbotSmoothness = 0.5
+local aimbotConnection
+local boxESPConnection
+local tracersConnection
+local skeletonESPConnection
+local highlights = {}
+local boxDrawings = {}
+local tracerDrawings = {}
+local skeletonDrawings = {}
+local healthBars = {}
 
 -- Function to find the closest living player
 local function getClosestPlayer()
@@ -75,53 +56,7 @@ local function aimbotUpdate()
     end
 end
 
--- Aimbot connection
-local aimbotConnection
-
--- Aimbot toggle button
-local AimbotToggle = MainTab:CreateButton({
-    Name = "Aimbot",
-    Callback = function()
-        aimbotEnabled = not aimbotEnabled
-        Rayfield:Notify({
-            Title = "Aimbot",
-            Content = aimbotEnabled and "Aimbot enabled" or "Aimbot disabled",
-            Duration = 3
-        })
-        if aimbotEnabled then
-            aimbotConnection = RunService:BindToRenderStep("Aimbot", Enum.RenderPriority.Camera.Value + 1, aimbotUpdate)
-        else
-            if aimbotConnection then 
-                RunService:UnbindFromRenderStep("Aimbot") 
-                aimbotConnection = nil
-            end
-        end
-    end
-})
-
-local SmoothnessSlider = MainTab:CreateSlider({
-    Name = "Aimbot Smoothness",
-    Range = {0, 1},
-    Increment = 0.1,
-    Suffix = "",
-    CurrentValue = 0.5,
-    Callback = function(value)
-        aimbotSmoothness = value
-        Rayfield:Notify({
-            Title = "Aimbot Smoothness",
-            Content = "Smoothness set to " .. tostring(value),
-            Duration = 3
-        })
-    end
-})
-
--- Visuals Tab (ESP)
-local VisualsTab = Window:CreateTab("Visuals", 4483362458)
-local VisualsSection = VisualsTab:CreateSection("Visuals")
-
-local espEnabled = false
-local highlights = {}
-
+-- ESP functions
 local function applyESP(player)
     if player == localPlayer or not player.Character or not espEnabled then return end
     local highlight = player.Character:FindFirstChild("Highlight")
@@ -143,30 +78,7 @@ local function removeESP(player)
     end
 end
 
-local ESPToggle = VisualsTab:CreateButton({
-    Name = "ESP Outline",
-    Callback = function()
-        espEnabled = not espEnabled
-        Rayfield:Notify({
-            Title = "ESP",
-            Content = espEnabled and "ESP enabled" or "ESP disabled",
-            Duration = 3
-        })
-        if espEnabled then
-            for _, player in ipairs(Players:GetPlayers()) do
-                applyESP(player)
-            end
-        else
-            for player, _ in pairs(highlights) do
-                removeESP(player)
-            end
-        end
-    end
-})
-
-local boxESPEnabled = false
-local boxDrawings = {}
-
+-- Box ESP functions
 local function createBoxDrawing()
     local quad = Drawing.new("Quad")
     quad.Visible = false
@@ -219,37 +131,7 @@ local function updateBoxESP()
     end
 end
 
-local boxESPConnection
-
-local BoxESPToggle = VisualsTab:CreateButton({
-    Name = "Box ESP",
-    Callback = function()
-        boxESPEnabled = not boxESPEnabled
-        Rayfield:Notify({
-            Title = "Box ESP",
-            Content = boxESPEnabled and "Box ESP enabled" or "Box ESP disabled",
-            Duration = 3
-        })
-        if boxESPEnabled then
-            for _, player in ipairs(Players:GetPlayers()) do
-                applyBoxESP(player)
-            end
-            boxESPConnection = RunService.RenderStepped:Connect(updateBoxESP)
-        else
-            for player, _ in pairs(boxDrawings) do
-                removeBoxESP(player)
-            end
-            if boxESPConnection then 
-                boxESPConnection:Disconnect() 
-                boxESPConnection = nil 
-            end
-        end
-    end
-})
-
-local tracersEnabled = false
-local tracerDrawings = {}
-
+-- Tracer functions
 local function createTracerDrawing()
     local line = Drawing.new("Line")
     line.Visible = false
@@ -294,37 +176,7 @@ local function updateTracers()
     end
 end
 
-local tracersConnection
-
-local TracersToggle = VisualsTab:CreateButton({
-    Name = "Tracers",
-    Callback = function()
-        tracersEnabled = not tracersEnabled
-        Rayfield:Notify({
-            Title = "Tracers",
-            Content = tracersEnabled and "Tracers enabled" or "Tracers disabled",
-            Duration = 3
-        })
-        if tracersEnabled then
-            for _, player in ipairs(Players:GetPlayers()) do
-                applyTracer(player)
-            end
-            tracersConnection = RunService.RenderStepped:Connect(updateTracers)
-        else
-            for player, _ in pairs(tracerDrawings) do
-                removeTracer(player)
-            end
-            if tracersConnection then 
-                tracersConnection:Disconnect() 
-                tracersConnection = nil 
-            end
-        end
-    end
-})
-
-local skeletonESPEnabled = false
-local skeletonDrawings = {}
-
+-- Skeleton ESP functions
 local function createSkeletonDrawing()
     local lines = {}
     local parts = {"Head-Torso", "Torso-LeftArm", "Torso-RightArm", "Torso-LeftLeg", "Torso-RightLeg", "LeftArm-LeftHand", "RightArm-RightHand", "LeftLeg-LeftFoot", "RightLeg-RightFoot"}
@@ -415,37 +267,7 @@ local function updateSkeletonESP()
     end
 end
 
-local skeletonESPConnection
-
-local SkeletonESPToggle = VisualsTab:CreateButton({
-    Name = "Skeleton ESP",
-    Callback = function()
-        skeletonESPEnabled = not skeletonESPEnabled
-        Rayfield:Notify({
-            Title = "Skeleton ESP",
-            Content = skeletonESPEnabled and "Skeleton ESP enabled" or "Skeleton ESP disabled",
-            Duration = 3
-        })
-        if skeletonESPEnabled then
-            for _, player in ipairs(Players:GetPlayers()) do
-                applySkeletonESP(player)
-            end
-            skeletonESPConnection = RunService.RenderStepped:Connect(updateSkeletonESP)
-        else
-            for player, _ in pairs(skeletonDrawings) do
-                removeSkeletonESP(player)
-            end
-            if skeletonESPConnection then 
-                skeletonESPConnection:Disconnect() 
-                skeletonESPConnection = nil 
-            end
-        end
-    end
-})
-
-local healthBarEnabled = false
-local healthBars = {}
-
+-- Health Bar functions
 local function createHealthBar(player)
     local billboardGui = Instance.new("BillboardGui")
     billboardGui.Name = "HealthBarGUI"
@@ -510,27 +332,6 @@ local function removeHealthBar(player)
     end
 end
 
-local HealthBarToggle = VisualsTab:CreateButton({
-    Name = "Health Bar ESP",
-    Callback = function()
-        healthBarEnabled = not healthBarEnabled
-        Rayfield:Notify({
-            Title = "Health Bar ESP",
-            Content = healthBarEnabled and "Health Bar ESP enabled" or "Health Bar ESP disabled",
-            Duration = 3
-        })
-        if healthBarEnabled then
-            for _, player in ipairs(Players:GetPlayers()) do
-                applyHealthBar(player)
-            end
-        else
-            for player, _ in pairs(healthBars) do
-                removeHealthBar(player)
-            end
-        end
-    end
-})
-
 -- Consolidated cleanup for player events
 local function cleanupPlayer(player)
     removeESP(player)
@@ -540,7 +341,32 @@ local function cleanupPlayer(player)
     removeHealthBar(player)
 end
 
-Players.PlayerAdded:Connect(function(player)
+-- Initialize features based on configuration
+if aimbotEnabled then
+    aimbotConnection = RunService:BindToRenderStep("Aimbot", Enum.RenderPriority.Camera.Value + 1, aimbotUpdate)
+end
+
+if boxESPEnabled then
+    boxESPConnection = RunService.RenderStepped:Connect(updateBoxESP)
+end
+
+if tracersEnabled then
+    tracersConnection = RunService.RenderStepped:Connect(updateTracers)
+end
+
+if skeletonESPEnabled then
+    skeletonESPConnection = RunService.RenderStepped:Connect(updateSkeletonESP)
+end
+
+-- Apply features to existing players
+for _, player in ipairs(Players:GetPlayers()) do
+    if player.Character then
+        applyESP(player)
+        applyBoxESP(player)
+        applyTracer(player)
+        applySkeletonESP(player)
+        applyHealthBar(player)
+    end
     player.CharacterAdded:Connect(function()
         applyESP(player)
         applyBoxESP(player)
@@ -548,28 +374,22 @@ Players.PlayerAdded:Connect(function(player)
         applySkeletonESP(player)
         applyHealthBar(player)
     end)
-end)
+end
 
 Players.PlayerRemoving:Connect(cleanupPlayer)
 
 -- Script cleanup
 game:BindToClose(function()
-    -- Clean up all connections
     if aimbotConnection then RunService:UnbindFromRenderStep("Aimbot") end
     if boxESPConnection then boxESPConnection:Disconnect() end
     if tracersConnection then tracersConnection:Disconnect() end
     if skeletonESPConnection then skeletonESPConnection:Disconnect() end
     
-    -- Clean up drawings
     for _, quad in pairs(boxDrawings) do quad:Remove() end
     for _, line in pairs(tracerDrawings) do line:Remove() end
     for _, lines in pairs(skeletonDrawings) do
         for _, line in pairs(lines) do line:Remove() end
     end
-    
-    -- Clean up highlights and health bars
     for player, _ in pairs(highlights) do removeESP(player) end
     for player, _ in pairs(healthBars) do removeHealthBar(player) end
 end)
-
-Rayfield:LoadConfiguration()
